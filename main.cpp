@@ -43,7 +43,6 @@ struct hdr_tosend {
 };
 
 void usage() {
-
     printf("syntax: send_arp <interface> <sender ip> <target ip>\n");
     printf("sample: send_arp wlan0 192.168.10.2 192.168.10.1\n");
 }
@@ -80,7 +79,6 @@ int get_myinterface(char *dev, char my_mac[6]) {
     for(int j=0; j<6; j++) {
         cout << hex << (int)my_mac[j] << " ";
     };
-
     return 0;
 }
 
@@ -107,7 +105,6 @@ int send_arp_requestpacket(pcap_t* handle, char mac[6], char sip[4], char tip[4]
            fprintf(stderr,"\nError sending the packet: \n", pcap_geterr(handle));
            return -1;
     }
-
     return 0;
 }
 
