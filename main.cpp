@@ -8,33 +8,27 @@
 
 using namespace std;
 
+// static is better than #define 
 static const int ETHERTYPE_ARP = 0x0806;
 static const int ARPOP_REQUEST = 1;
 static const int ARPOP_REPLY = 2;
 
-/*
-static is better than #define
-#define	ETHERTYPE_ARP	0x0806
-#define	ARPOP_REQUEST	1
-#define	ARPOP_REPLY	2
-*/
-
 struct ether_hdr {
-    uint8_t h_dest[6];	/* destination eth addr	*/
+    uint8_t h_dest[6];	    /* destination eth addr	*/
     uint8_t h_source[6];	/* source ether addr	*/
-    uint16_t h_proto;              /* packet type ID field	*/
+    uint16_t h_proto;       /* packet type ID field	*/
 };
 
 struct arp_hdr {
     uint16_t ar_hrd;      	/* Format of hardware address.  */
     uint16_t ar_pro;      	/* Format of protocol address.  */
-    uint8_t ar_hln;               /* Length of hardware address.  */
-    uint8_t ar_pln;               /* Length of protocol address.  */
-    uint16_t ar_op;           /* ARP opcode (command).  */
+    uint8_t ar_hln;         /* Length of hardware address.  */
+    uint8_t ar_pln;         /* Length of protocol address.  */
+    uint16_t ar_op;         /* ARP opcode (command).  */
     uint8_t __ar_sha[6];	/* Sender hardware address.  */
-    uint8_t __ar_sip[4];          /* Sender IP address.  */
+    uint8_t __ar_sip[4];    /* Sender IP address.  */
     uint8_t __ar_tha[6];	/* Target hardware address.  */
-    uint8_t __ar_tip[4];          /* Target IP address.  */
+    uint8_t __ar_tip[4];    /* Target IP address.  */
 };
 
 struct hdr_tosend {
