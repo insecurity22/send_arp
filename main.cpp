@@ -143,7 +143,7 @@ int main(int argc, char *argv[])
 
         etharph = (hdr_tosend*)packet;
 
-        if(etharph->eth.h_proto == ETHERTYPE_ARP
+        if(etharph->eth.h_proto == htons(ETHERTYPE_ARP)
                 && etharph->arph.ar_op == ARPOP_REPLY) {
 
             if(onetime == 0) { // Get victim mac
