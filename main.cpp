@@ -37,8 +37,8 @@ struct hdr_tosend {
 };
 
 void usage() {
-    printf("syntax: arp <interface> <sender ip> <target ip>\n");
-    printf("sample: arp wlan0 192.168.10.2 192.168.10.1\n");
+    printf("syntax: send_arp <interface> <sender ip> <target ip>\n");
+    printf("sample: send_arp wlan0 192.168.10.2 192.168.10.1\n");
 }
 
 int get_myinterface(char *dev, uint8_t my_mac[6]) {
