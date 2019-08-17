@@ -131,7 +131,8 @@ int main(int argc, char *argv[])
         if (res == -1 || res == -2) break;
 
         etharph = (hdr_tosend*)packet;
-        if(etharph->eth.h_proto == htons(ETHERTYPE_ARP) && etharph->arph.ar_op == htons(ARPOP_REPLY) && memcmp(etharph->eth.h_dest, mac, 6)==0 && onetime == 0) {
+        if(etharph->eth.h_proto == htons(ETHERTYPE_ARP) && etharph->arph.ar_op == htons(ARPOP_REPLY) 
+                && memcmp(etharph->eth.h_dest, mac, 6)==0 && onetime == 0) {
             onetime = 1;
             memcpy(victim_mac, etharph->eth.h_source, 6);
             cout << " Get victim mac (for arp reply)" << endl;
