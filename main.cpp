@@ -159,7 +159,9 @@ int main(int argc, char *argv[])
             cout << "Error send arp reply packet" << endl;
             return -1;
         } else cout << "Send arp reply packet" << endl;
-        sleep(3);
+
+        // sleep(3);
+        break; // send arp one packet
     }
     pcap_close(handle);
 }
